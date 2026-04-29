@@ -2,7 +2,7 @@ from datetime import timedelta
 import random
 import time
 from airflow import DAG
-from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import KubernetesPodOperator
 from airflow.utils.dates import days_ago
 from kubernetes.client import models as k8s
 
@@ -176,4 +176,3 @@ sys.exit(1)
     # Set dependencies for combined tasks
     for combined_task in combined_tasks:
         combined_task.set_upstream(cpu_tasks + ram_tasks)
-

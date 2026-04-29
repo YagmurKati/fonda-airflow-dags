@@ -5,7 +5,7 @@ from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.dummy import DummyOperator
 from airflow.operators.python_operator import PythonOperator
-from airflow.providers.cncf.kubernetes.operators.pod import \
+from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import \
     KubernetesPodOperator
 from airflow.utils.dates import days_ago
 
