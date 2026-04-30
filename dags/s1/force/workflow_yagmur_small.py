@@ -127,7 +127,7 @@ outputs_volume = k8s.V1Volume(
 )
 
 outputs_volume_mount = k8s.V1VolumeMount(
-    name="outputs-data", mount_path=OUTPUTS_DATA_PATH, sub_path=None, read_only=False
+    name="outputs-data", mount_path="/data/outputs", sub_path=None, read_only=False
 )
 
 security_context = k8s.V1SecurityContext(run_as_user=0)
