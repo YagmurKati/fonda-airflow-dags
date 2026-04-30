@@ -500,8 +500,20 @@ with DAG(
                     f"""
                     TILE=\"{{{{ task_instance.xcom_pull('tsa_task_{tile_index}')[\"tile\"] }}}}\"
                     FILES=\"{{{{ task_instance.xcom_pull('tsa_task_{tile_index}')[\"files\"] }}}}\"
+                    if [ "$FILES" = "[]" ]; then
+                      echo "No TSA output files for $TILE, skipping pyramid task."
+                      exit 0
+                    fi
                     CHOSEN_FILE=`echo $FILES | sed 's/[][]//g' | cut -d "," -f $FILE_INDEX`
+                    if [ -z "$CHOSEN_FILE" ]; then
+                      echo "No file at index $FILE_INDEX for $TILE, skipping pyramid task."
+                      exit 0
+                    fi
                     FILES_TO_DO="${{TRENDS_FOLDERPATH}}/${{TILE}}/${{CHOSEN_FILE}}"
+                    if [ ! -r "$FILES_TO_DO" ]; then
+                      echo "Pyramid input $FILES_TO_DO does not exist, skipping pyramid task."
+                      exit 0
+                    fi
                     force-pyramid $FILES_TO_DO
                     """
                 ],
