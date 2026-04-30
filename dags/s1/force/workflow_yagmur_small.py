@@ -42,7 +42,7 @@ mask_resolution = str(30)
 num_of_tiles = 4
 # Parallel factor is how many images are to be processed,
 # the maximum amount of parallelization that's possible
-parallel_factor = 32
+parallel_factor = 16
 num_of_filters = 10
 # One has to assert that the number of pyramids tasks per tile is
 # smaller than the number of the actual filters
