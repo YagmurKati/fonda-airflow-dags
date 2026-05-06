@@ -21,14 +21,15 @@ wvdb = AUX_DATA_PATH + "/wvdb"
 endmember_filepath = AUX_DATA_PATH + "/endmember/hostert-2003.txt"
 
 # Output data paths
-OUTPUTS_DATA_PATH = "/data/outputs"
+OUTPUTS_DATA_PATH = "/data/outputs/force-benchmark-run"
 allowed_tiles_filepath = OUTPUTS_DATA_PATH + "/allowed_tiles.txt"
 masks_folderpath = OUTPUTS_DATA_PATH + "/masks"
 queue_filepath = OUTPUTS_DATA_PATH + "/queue.txt"
 ard_folderpath = OUTPUTS_DATA_PATH + "/level2_ard"
 trends_folderpath = OUTPUTS_DATA_PATH + "/trends"
 mosaic_folderpath = OUTPUTS_DATA_PATH + "/mosaic"
-tests_folderpath = OUTPUTS_DATA_PATH + "/check-results"
+tests_folderpath = "/data/outputs/check-results"
+source_queue_filepath = "/data/outputs/queue.txt"
 
 # Query parameters
 sensors_level1 = "LT04,LT05,LE07,S2A"
@@ -38,10 +39,10 @@ daterange = start_date.strftime("%Y%m%d") + "," + end_date.strftime("%Y%m%d")
 mask_resolution = str(30) 
 
 # Run parameters
-num_of_tiles = 28
+num_of_tiles = 4
 # Parallel factor is how many images are to be processed,
 # the maximum amount of parallelization that's possible
-parallel_factor = 2794
+parallel_factor = 16
 num_of_filters = 10
 # One has to assert that the number of pyramids tasks per tile is
 # smaller than the number of the actual filters
@@ -126,7 +127,7 @@ outputs_volume = k8s.V1Volume(
 )
 
 outputs_volume_mount = k8s.V1VolumeMount(
-    name="outputs-data", mount_path=OUTPUTS_DATA_PATH, sub_path=None, read_only=False
+    name="outputs-data", mount_path="/data/outputs", sub_path=None, read_only=False
 )
 
 security_context = k8s.V1SecurityContext(run_as_user=0)
@@ -193,7 +194,14 @@ with DAG(
         task_id="generate_allowed_tiles",
         cmds=["/bin/sh", "-c"],
         arguments=[
-            "force-tile-extent $AOI_FILEPATH $DATACUBE_FOLDERPATH $ALLOWED_TILES_FILEPATH"
+            """
+            mkdir -p $OUTPUTS_DATA_PATH
+            force-tile-extent $AOI_FILEPATH $DATACUBE_FOLDERPATH $TMP_ALLOWED_TILES_FILEPATH
+            {
+              echo $NUM_OF_TILES
+              sed -n "2,$((NUM_OF_TILES + 1))p" $TMP_ALLOWED_TILES_FILEPATH
+            } > $ALLOWED_TILES_FILEPATH
+            """
         ],
         security_context=security_context,
         container_resources=compute_resources,
@@ -203,6 +211,9 @@ with DAG(
             "AOI_FILEPATH": aoi_filepath,
             "DATACUBE_FOLDERPATH": datacube_folderpath,
             "ALLOWED_TILES_FILEPATH": allowed_tiles_filepath,
+            "TMP_ALLOWED_TILES_FILEPATH": OUTPUTS_DATA_PATH + "/allowed_tiles.full.txt",
+            "OUTPUTS_DATA_PATH": OUTPUTS_DATA_PATH,
+            "NUM_OF_TILES": str(num_of_tiles),
         },
         get_logs=True,
         affinity=experiment_affinity,
@@ -243,13 +254,14 @@ with DAG(
         cmds=["/bin/sh", "-c"],
         arguments=[
             """
-            # wget -O $QUEUE_FILEPATH https://box.hu-berlin.de/f/8cbd80805d484be1b91a/?dl=1
-            mkdir -p /data/outputs/queue_files
-            split -a 4 -l$((`wc -l < $QUEUE_FILEPATH`/$PARALLEL_FACTOR)) --numeric-suffixes=0 $QUEUE_FILEPATH /data/outputs/queue_files/queue_ --additional-suffix=.txt
-            mkdir -p /data/outputs/param_files
-            mkdir -p /data/outputs/level2_ard
-            mkdir -p /data/outputs/level2_log
-            mkdir -p /data/outputs/level2_tmp
+            mkdir -p $OUTPUTS_DATA_PATH
+            mkdir -p $OUTPUTS_DATA_PATH/queue_files
+            head -n $PARALLEL_FACTOR $SOURCE_QUEUE_FILEPATH > $QUEUE_FILEPATH
+            split -a 4 -l1 --numeric-suffixes=0 $QUEUE_FILEPATH $OUTPUTS_DATA_PATH/queue_files/queue_ --additional-suffix=.txt
+            mkdir -p $OUTPUTS_DATA_PATH/param_files
+            mkdir -p $OUTPUTS_DATA_PATH/level2_ard
+            mkdir -p $OUTPUTS_DATA_PATH/level2_log
+            mkdir -p $OUTPUTS_DATA_PATH/level2_tmp
             force-parameter . LEVEL2 0
             mv LEVEL2-skeleton.prm $PARAM
             # read grid definition
@@ -262,9 +274,9 @@ with DAG(
             # sed -i "/^PARALLEL_READS /cPARALLEL_READS = TRUE" $PARAM
             # sed -i "/^DELAY /cDELAY = 2" $PARAM
             sed -i "/^NPROC /cNPROC = 1" $PARAM
-            sed -i "/^DIR_LEVEL2 /cDIR_LEVEL2 = /data/outputs/level2_ard/" $PARAM
-            sed -i "/^DIR_LOG /cDIR_LOG = /data/outputs/level2_log/" $PARAM
-            sed -i "/^DIR_TEMP /cDIR_TEMP = /data/outputs/level2_tmp/" $PARAM
+            sed -i "/^DIR_LEVEL2 /cDIR_LEVEL2 = $OUTPUTS_DATA_PATH/level2_ard/" $PARAM
+            sed -i "/^DIR_LOG /cDIR_LOG = $OUTPUTS_DATA_PATH/level2_log/" $PARAM
+            sed -i "/^DIR_TEMP /cDIR_TEMP = $OUTPUTS_DATA_PATH/level2_tmp/" $PARAM
             sed -i "/^FILE_DEM /cFILE_DEM = $DEM/crete_srtm-aster.vrt" $PARAM
             sed -i "/^DIR_WVPLUT /cDIR_WVPLUT = $WVDB" $PARAM
             sed -i "/^FILE_TILE /cFILE_TILE = $TILE" $PARAM
@@ -283,13 +295,15 @@ with DAG(
         pool='restricted_pool',
         env_vars={
             "QUEUE_FILEPATH": queue_filepath,
+            "SOURCE_QUEUE_FILEPATH": source_queue_filepath,
             "PARALLEL_FACTOR": str(parallel_factor),
             "CUBEFILE": datacube_filepath,
             "DEM": dem_folderpath,
             "WVDB": wvdb,
             "TILE": allowed_tiles_filepath,
             "NTHREAD": str(float(preprocess_resources.requests["cpu"]) * 2),
-            "PARAM": "/data/outputs/param_files/ard.prm",
+            "PARAM": OUTPUTS_DATA_PATH + "/param_files/ard.prm",
+            "OUTPUTS_DATA_PATH": OUTPUTS_DATA_PATH,
         },
         get_logs=True,
         affinity=experiment_affinity,
@@ -325,9 +339,9 @@ with DAG(
             volumes=[dataset_volume, outputs_volume],
             volume_mounts=[dataset_volume_mount, outputs_volume_mount],
             env_vars={
-                "GLOBAL_PARAM": "/data/outputs/param_files/ard.prm",
-                "PARAM": f"/data/outputs/param_files/ard_{index}.prm",
-                "QUEUE_FILE": f"/data/outputs/queue_files/queue_{index}.txt",
+                "GLOBAL_PARAM": OUTPUTS_DATA_PATH + "/param_files/ard.prm",
+                "PARAM": OUTPUTS_DATA_PATH + f"/param_files/ard_{index}.prm",
+                "QUEUE_FILE": OUTPUTS_DATA_PATH + f"/queue_files/queue_{index}.txt",
             },
             get_logs=True,
             affinity=experiment_affinity,
@@ -384,7 +398,7 @@ with DAG(
             sed -i "/^OUTPUT_TRO /cOUTPUT_TRO = TRUE" $PARAM
             sed -i "/^OUTPUT_CAO /cOUTPUT_CAO = TRUE" $PARAM
 
-            cp $PARAM /data/outputs/param_files/
+            cp $PARAM $OUTPUTS_DATA_PATH/param_files/
 
             echo "DONE"
             """
@@ -404,6 +418,7 @@ with DAG(
             "START_DATE": start_date.isoformat(),
             "END_DATE": end_date.isoformat(),
             "MASK_RESOLUTION": mask_resolution,
+            "OUTPUTS_DATA_PATH": OUTPUTS_DATA_PATH,
         },
         get_logs=True,
         affinity=experiment_affinity,
@@ -438,7 +453,7 @@ with DAG(
                 mkdir -p /airflow/xcom/
 
                 # Find *.tif files and store them in a list of files
-                cd /data/outputs/trends/$TILE
+                cd $OUTPUTS_DATA_PATH/trends/$TILE
                 files=`find *.tif | tr '\n' ','`
                 # Add Brackets
                 files='['$files']'
@@ -453,9 +468,10 @@ with DAG(
             volume_mounts=[dataset_volume_mount, outputs_volume_mount],
             do_xcom_push=True,
             env_vars={
-                "GLOBAL_PARAM": "/data/outputs/param_files/tsa.prm",
-                "PARAM": f"/data/outputs/param_files/tsa_{index}.prm",
+                "GLOBAL_PARAM": OUTPUTS_DATA_PATH + "/param_files/tsa.prm",
+                "PARAM": OUTPUTS_DATA_PATH + f"/param_files/tsa_{index}.prm",
                 "TILE_FILE": allowed_tiles_filepath,
+                "OUTPUTS_DATA_PATH": OUTPUTS_DATA_PATH,
             },
             get_logs=True,
             affinity=experiment_affinity,
@@ -484,8 +500,20 @@ with DAG(
                     f"""
                     TILE=\"{{{{ task_instance.xcom_pull('tsa_task_{tile_index}')[\"tile\"] }}}}\"
                     FILES=\"{{{{ task_instance.xcom_pull('tsa_task_{tile_index}')[\"files\"] }}}}\"
+                    if [ "$FILES" = "[]" ]; then
+                      echo "No TSA output files for $TILE, skipping pyramid task."
+                      exit 0
+                    fi
                     CHOSEN_FILE=`echo $FILES | sed 's/[][]//g' | cut -d "," -f $FILE_INDEX`
+                    if [ -z "$CHOSEN_FILE" ]; then
+                      echo "No file at index $FILE_INDEX for $TILE, skipping pyramid task."
+                      exit 0
+                    fi
                     FILES_TO_DO="${{TRENDS_FOLDERPATH}}/${{TILE}}/${{CHOSEN_FILE}}"
+                    if [ ! -r "$FILES_TO_DO" ]; then
+                      echo "Pyramid input $FILES_TO_DO does not exist, skipping pyramid task."
+                      exit 0
+                    fi
                     force-pyramid $FILES_TO_DO
                     """
                 ],
