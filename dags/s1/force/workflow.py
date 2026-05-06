@@ -176,13 +176,13 @@ default_args = {
 }
 
 with DAG(
-    "force",
+    "force-1",
     default_args=default_args,
     description="Airflow implementation of a FORCE workflow",
     schedule_interval="@once",
     start_date=days_ago(2),
     max_active_tasks=5,
-    tags=["force"],
+    tags=["force-1"],
     max_active_runs=1,
 ) as dag:
 
@@ -190,7 +190,7 @@ with DAG(
         name="generate_allowed_tiles",
         namespace=namespace,
         image="davidfrantz/force:3.6.5",
-        labels={"workflow": "force"},
+        labels={"workflow": "force-1"},
         task_id="generate_allowed_tiles",
         cmds=["/bin/sh", "-c"],
         arguments=[
@@ -224,7 +224,7 @@ with DAG(
         name="generate_analysis_mask",
         namespace=namespace,
         image="davidfrantz/force:3.6.5",
-        labels={"workflow": "force"},
+        labels={"workflow": "force-1"},
         task_id="generate_analysis_mask",
         cmds=["/bin/sh", "-c"],
         arguments=[
@@ -249,7 +249,7 @@ with DAG(
         name="prepare_level2",
         namespace=namespace,
         image="davidfrantz/force:3.6.5",
-        labels={"workflow": "force"},
+        labels={"workflow": "force-1"},
         task_id="prepare_level2",
         cmds=["/bin/sh", "-c"],
         arguments=[
@@ -323,7 +323,7 @@ with DAG(
             name="preprocess_level2_" + index,
             namespace=namespace,
             image="davidfrantz/force:3.6.5",
-            labels={"workflow": "force"},
+            labels={"workflow": "force-1"},
             task_id="preprocess_level2_" + index,
             cmds=["/bin/sh", "-c"],
             arguments=[
@@ -355,7 +355,7 @@ with DAG(
         name="prepape_tsa",
         namespace=namespace,
         image="davidfrantz/force:3.6.5",
-        labels={"workflow": "force"},
+        labels={"workflow": "force-1"},
         task_id="prepare_tsa",
         cmds=["/bin/sh", "-c"],
         arguments=[
@@ -432,7 +432,7 @@ with DAG(
             name="tsa_task_" + index,
             namespace=namespace,
             image="davidfrantz/force:3.6.5",
-            labels={"workflow": "force"},
+            labels={"workflow": "force-1"},
             task_id="tsa_task_" + index,
             cmds=["/bin/bash", "-c"],
             arguments=[
@@ -493,7 +493,7 @@ with DAG(
                 name="pyramid_task_" + index,
                 namespace=namespace,
                 image="davidfrantz/force:3.6.5",
-                labels={"workflow": "force"},
+                labels={"workflow": "force-1"},
                 task_id="pyramid_task_" + index,
                 cmds=["/bin/bash", "-c"],
                 arguments=[
@@ -537,7 +537,7 @@ with DAG(
         name="wait_for_trends",
         namespace=namespace,
         image="davidfrantz/force:3.6.5",
-        labels={"workflow": "force"},
+        labels={"workflow": "force-1"},
         task_id="wait_for_trends",
         cmds=["/bin/bash", "-c"],
         arguments=[
@@ -581,7 +581,7 @@ with DAG(
             name="mosaic_task_" + index,
             namespace=namespace,
             image="davidfrantz/force:3.6.5",
-            labels={"workflow": "force"},
+            labels={"workflow": "force-1"},
             task_id="mosaic_task_" + index,
             cmds=["/bin/bash", "-c"],
             arguments=[
@@ -607,7 +607,7 @@ with DAG(
         name="check_results",
         namespace=namespace,
         image="rocker/geospatial:3.6.3",
-        labels={"workflow": "force"},
+        labels={"workflow": "force-1"},
         task_id="check_results",
         cmds=["/bin/sh", "-c"],
         arguments=[
